@@ -38,7 +38,7 @@ async function didThrow(func, args): Promise<boolean> {
 }
 
 let connection;
-async function getConnection(): Promise<Connection> {
+export async function getConnection(): Promise<Connection> {
   if (connection) return connection;
 
   let newConnection = new Connection(url, 'recent', );
@@ -56,7 +56,7 @@ async function getConnection(): Promise<Connection> {
   return connection;
 }
 
-async function loadProgram(connection: Connection, path: string): Promise<PublicKey> {
+async function loadProgram(payer, connection: Connection, path: string): Promise<PublicKey> {
   const NUM_RETRIES = 500; /* allow some number of retries */
   const data = await fs.readFile(path
   );
@@ -66,14 +66,13 @@ async function loadProgram(connection: Connection, path: string): Promise<Public
     (BpfLoader.getMinNumSignatures(data.length) + NUM_RETRIES) +
     (await connection.getMinimumBalanceForRentExemption(data.length));
 
-  const from = await newAccountWithLamports(connection, balanceNeeded);
   const program_account = new Account();
   console.log('Loading program:', path);
-  await BpfLoader.load(connection, from, program_account, data);
+  await BpfLoader.load(connection, payer, program_account, data);
   return program_account.publicKey;
 }
 
-async function GetPrograms(connection: Connection): Promise<PublicKey> {
+async function GetPrograms(connection: Connection, payer: Account): Promise<PublicKey> {
   const store = new Store();
   let tokenProgramId = null;
   try {
@@ -89,7 +88,7 @@ async function GetPrograms(connection: Connection): Promise<PublicKey> {
       throw new Error('failed to find account');
     }
   } catch (err) {
-    tokenProgramId = await loadProgram(connection, '../target/bpfel-unknown-unknown/release/spl_token.so');
+    tokenProgramId = await loadProgram(connection, payer, '../target/bpfel-unknown-unknown/release/spl_token.so');
     await store.save('config.json', {
       tokenProgramId: tokenProgramId.toString(),
     });
@@ -97,16 +96,13 @@ async function GetPrograms(connection: Connection): Promise<PublicKey> {
   return tokenProgramId;
 }
 
-export async function loadTokenProgram(): Promise<void> {
-  const connection = await getConnection();
-  programId = await GetPrograms(connection);
+export async function loadTokenProgram(connection, payer): Promise<void> {
+  programId = await GetPrograms(connection, payer);
 
   console.log('Token Program ID', programId.toString());
 }
 
-export async function createMint(): Promise<Account> {
-  const connection = await getConnection();
-  const payer = await newAccountWithLamports(connection, 100000000000 /* wag */);
+export async function createMint(connection, payer): Promise<Account> {
   mintOwner = new Account();
   testAccountOwner = new Account();
   [testToken, testAccount] = await Token.createMint(
@@ -180,30 +176,34 @@ export async function transfer(numTransfer, accounts): Promise<void> {
   var num_error = 0;
   const accountInfo = await testToken.getAccountInfo(testAccount);
   console.log("account info: " + accountInfo);
-  for (var i = 0; i < numTransfer; i++) {
-    const dest = accounts[i % accounts.length];
-    //console.log("transfer to " + dest);
-    transfer_promises.push(testToken.transfer(testAccount, dest, testAccountOwner, [], 1)
-      .then(() => {
-        num_success += 1;
-      })
-      .catch(e => {
-          console.log(dest + " error: " + e + " " + dests.get(dest));
-          dests.set(dest, dests.get(dest) - 1);
-          num_error += 1;
-      })
-    );
-    dests_list.push(dest);
-    if (dests.has(dest)) {
-      dests.set(dest, dests.get(dest) + 1);
-    } else {
-      dests.set(dest, 1);
+  var chunkSize = 10;
+  var numChunks = numTransfer / chunkSize;
+  for (var i = 0; i < numChunks; i++) {
+    for (var j = 0; j < chunkSize; j++) {
+      const dest = accounts[j % accounts.length];
+      //console.log("transfer to " + dest);
+      transfer_promises.push(testToken.transfer(testAccount, dest, testAccountOwner, [], 1)
+        .then(() => {
+          num_success += 1;
+        })
+        .catch(e => {
+            console.log(dest + " error: " + e + " " + dests.get(dest));
+            dests.set(dest, dests.get(dest) - 1);
+            num_error += 1;
+        })
+      );
+      dests_list.push(dest);
+      if (dests.has(dest)) {
+        dests.set(dest, dests.get(dest) + 1);
+      } else {
+        dests.set(dest, 1);
+      }
     }
-  }
 
-  await Promise.all(transfer_promises);
-  console.log("done waiting..");
-  console.log("num_success: " + num_success + " error: " + num_error);
+    await Promise.all(transfer_promises);
+    console.log("done waiting..");
+    console.log("num_success: " + num_success + " error: " + num_error);
+  }
 
   const NUM_POLL = 10;
   for (var i = 0; i < NUM_POLL; i++) {

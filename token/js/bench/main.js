@@ -18,22 +18,46 @@ import {
   burn,
   closeAccount,
   nativeToken,
+  getConnection,
 } from './token-test';
+import {Store} from '../client/util/store';
+import {Account} from '@solana/web3.js';
+import {newAccountWithLamports} from '../client/util/new-account-with-lamports';
 const {argv} = require('yargs')
   .require("num_accounts")
   .require("num_transfer")
   .require("num_burn")
   .require("num_mint")
+  .require("payer_account")
+
+const fs = require('fs');
 
 async function main() {
+  const connection = await getConnection();
+
+  var payer: Account;
+  try {
+    console.log("Loading payer account from " + argv.payer_account);
+    var payer_buffer = fs.readFileSync(argv.payer_account);
+    payer = new Account(Uint8Array.from(payer_buffer));
+    console.log("loaded " + payer.publicKey);
+  } catch (err) {
+    console.log("Payer account doesn't exist. " + err);
+    var payer_account = await newAccountWithLamports(connection, 100000000000);
+    fs.writeFileSync(argv.payer_account, payer_account.secretKey);
+    payer = payer_account;
+  }
+  const info = await connection.getAccountInfo(payer.publicKey);
+  console.log("  using payer with " + info.lamports + " lamports.");
+
   var start = Date.now();
   console.log('Starting reddit test: loading token program..');
-  await loadTokenProgram();
+  await loadTokenProgram(connection, payer);
   console.log("loaded in " + (Date.now() - start) + " ms");
 
   console.log('Creating reddit token mint account..');
   start = Date.now();
-  var mintOwner = await createMint();
+  var mintOwner = await createMint(connection, payer);
   console.log("  mint created in " + (Date.now() - start) + " ms");
 
   console.log('Creating subreddit accounts.. ' + argv.num_accounts);
