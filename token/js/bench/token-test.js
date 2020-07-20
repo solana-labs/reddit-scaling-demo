@@ -105,12 +105,13 @@ export async function loadTokenProgram(connection, payer): Promise<void> {
 export async function createMint(connection, payer): Promise<Account> {
   mintOwner = new Account();
   testAccountOwner = new Account();
+  const amount = 100000;
   [testToken, testAccount] = await Token.createMint(
     connection,
     payer,
     mintOwner.publicKey,
     testAccountOwner.publicKey,
-    new TokenAmount(10000),
+    new TokenAmount(amount),
     2,
     programId,
     true,
@@ -123,7 +124,7 @@ export async function createMint(connection, payer): Promise<Account> {
   const accountInfo = await testToken.getAccountInfo(testAccount);
   assert(accountInfo.mint.equals(testToken.publicKey));
   assert(accountInfo.owner.equals(testAccountOwner.publicKey));
-  assert(accountInfo.amount.toNumber() == 10000);
+  assert(accountInfo.amount.toNumber() == amount);
   assert(accountInfo.delegate == null);
   assert(accountInfo.delegatedAmount.toNumber() == 0);
 }
@@ -256,25 +257,35 @@ export async function setOwner(): Promise<void> {
 }
 
 // 100,000 mint
-export async function mintTo(theMintOwner, accounts, num_mint): Promise<void> {
+export async function mintTo(accounts, num_mint): Promise<void> {
   const connection = await getConnection();
 
-  var mint_promises = [];
   var num_success = 0;
   var num_error = 0;
-  for (var i = 0; i < num_mint; i++) {
-    var dest = accounts[i % accounts.length];
-    mint_promises.push(testToken.mintTo(dest, mintOwner, [], 42)
-      .then(() => { num_success += 1; })
-      .catch(e => {
-        console.log("  " + dest + " mint error: " + e);
-        num_error += 1;
-      })
-    );
-  }
+  const chunkSize = 10;
+  const numChunks = num_mint / chunkSize;
+  var total = 0;
+  for (var i = 0; i < numChunks; i++) {
+    var start = Date.now();
+    var mint_promises = [];
+    for (var j = 0; j < chunkSize; j++) {
+      if (total > num_mint) {
+        break;
+      }
+      total += 1;
+      var dest = accounts[total % accounts.length];
+      mint_promises.push(testToken.mintTo(dest, mintOwner, [], 42)
+        .then(() => { num_success += 1; })
+        .catch(e => {
+          console.log("  " + dest + " mint error: " + e);
+          num_error += 1;
+        })
+      );
+    }
 
-  await Promise.all(mint_promises);
-  console.log("  mint success: " + num_success + " error: " + num_error);
+    await Promise.all(mint_promises);
+    console.log("  mint success: " + num_success + " error: " + num_error + " " + (Date.now() - start) + " ms");
+  }
 }
 
 // 75,000 burns

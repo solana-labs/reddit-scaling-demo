@@ -80,7 +80,7 @@ async function main() {
 
   console.log('Minting ' + argv.num_mint + " to " + argv.num_accounts + " accounts.");
   start = Date.now();
-  await mintTo(mintOwner, accounts, argv.num_mint);
+  await mintTo(accounts, argv.num_mint);
   console.log("  minting took " + (Date.now() - start) + " ms");
 
   console.log('Burning subreddit tokens.. ' + argv.num_burn);
