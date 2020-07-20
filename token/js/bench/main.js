@@ -61,33 +61,48 @@ async function main() {
   var start = Date.now();
   console.log('Starting reddit test: loading token program..');
   await loadTokenProgram(connection, payer);
-  console.log("loaded in " + (Date.now() - start) + " ms");
+  const load_token_time = (Date.now() - start);
+  console.log("loaded in " + load_token_time + " ms");
 
   console.log('Creating reddit token mint account..');
   start = Date.now();
   var mintOwner = await createMint(connection, payer);
-  console.log("  mint created in " + (Date.now() - start) + " ms");
+  const mint_create_time = (Date.now() - start);
+  console.log("  mint created in " + mint_create_time + " ms");
 
   console.log('Creating subreddit accounts.. ' + argv.num_accounts);
   start = Date.now();
   var [accounts, owners] = await createAccounts(argv.num_accounts);
-  console.log("  accounts created in " + (Date.now() - start) + " ms");
+  const create_time = (Date.now() - start);
+  console.log("  accounts created in " + create_time + " ms");
 
   console.log('Starting transfers ' + argv.num_transfer);
   start = Date.now();
   await transfer(argv.num_transfer, accounts, owners);
-  console.log("  transfers took " + (Date.now() - start) + " ms");
+  const transfer_time = (Date.now() - start);
+  console.log("  transfers took " + transfer_time + " ms");
 
   console.log('Minting ' + argv.num_mint + " to " + argv.num_accounts + " accounts.");
   start = Date.now();
   await mintTo(accounts, argv.num_mint);
-  console.log("  minting took " + (Date.now() - start) + " ms");
+  const mint_time = (Date.now() - start);
+  console.log("  minting took " + mint_time + " ms");
 
   console.log('Burning subreddit tokens.. ' + argv.num_burn);
   start = Date.now();
   await burn(accounts, owners, argv.num_burn);
-  console.log("  burn took " + (Date.now() - start) + " ms");
+  const burn_time = (Date.now() - start);
+  console.log("  burn took " + burn_time + " ms");
 
+  console.log("Summary:");
+  console.log(" loaded token program in " + load_token_time + " ms");
+  console.log(" minting account created in " + mint_create_time + " ms");
+  console.log(" created " + argv.num_accounts + " accounts in " + create_time + " ms");
+  console.log(" " + argv.num_transfer + " transfers in " + transfer_time + " ms");
+  console.log(" " + argv.num_mint + " token mints in " + mint_time + " ms");
+  console.log(" " + argv.num_burn + " token burns in " + burn_time + " ms");
+  const total = load_token_time + mint_create_time + create_time + transfer_time + mint_time + burn_time;
+  console.log(" total: " + total + " ms");
   console.log('Success\n');
 }
 

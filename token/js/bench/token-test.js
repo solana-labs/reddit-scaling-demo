@@ -131,29 +131,36 @@ export async function createMint(connection, payer): Promise<Account> {
 
 export async function createAccounts(numAccounts): Promise<void> {
   var destOwners = [];
-  var create_promises = [];
-  for (var i = 0; i < numAccounts; i++) {
-    const destOwner = new Account();
-    create_promises.push(testToken.createAccount(destOwner.publicKey));
-    destOwners.push(destOwner);
-
-    if (i % 10 == 0) {
-      console.log("created " + i + " accounts");
-    }
-  }
-
   var num_success = 0;
-  var accounts = await Promise.all(create_promises);
-  for (const account_promise of create_promises) {
-    account_promise
-      .then((account) => {
-        num_success += 1;
-      })
-      .catch(e => {
-        console.log("error: ", e);
-      });
+  const chunkSize = 10;
+  var numChunks = numAccounts / chunkSize;
+  var total = 0;
+  var accounts = [];
+  for (var i = 0; i < numChunks; i++) {
+    var create_promises = [];
+    for (var j = 0; j < chunkSize; j++) {
+      if (total > numAccounts) {
+        break;
+      }
+      total += 1;
+      const destOwner = new Account();
+      create_promises.push(
+        testToken.createAccount(destOwner.publicKey)
+        .then((account) => {
+          num_success += 1;
+          return account;
+        })
+        .catch(e => {
+          console.log("error: ", e);
+        })
+      );
+      destOwners.push(destOwner);
+    }
+
+    var new_accounts = await Promise.all(create_promises);
+    accounts.push(...new_accounts);
+    console.log("created: " + num_success);
   }
-  console.log("created: " + num_success);
 
   assert(accounts.length > 0);
   for (var i = 0; i < accounts.length; i++) {
@@ -233,17 +240,28 @@ export async function transfer(numTransfer, accounts, owners): Promise<void> {
 
   console.log("starting inter-account transfers");
   // Do some transfers between accounts.
+  num_success = 0;
+  num_error = 0;
   if (accounts.length > 2) {
     var transfer_promises = [];
     for (var i = 0; i < accounts.length; i += 2) {
       const src = accounts[i];
       const srcOwner = owners[i];
       const dest = accounts[i + 1];
-      transfer_promises.push(testToken.transfer(src, dest, srcOwner, [], 1));
+      transfer_promises.push(
+        testToken.transfer(src, dest, srcOwner, [], 1)
+          .then((x) => {
+            num_success += 1;
+          })
+          .catch(e => {
+            num_error += 1;
+            console.log("transfer error: " + e);
+          })
+      );
     }
     await Promise.all(transfer_promises);
   }
-  console.log("done..");
+  console.log("done.. success: " + num_success + " error: " + num_error);
 }
 
 export async function setOwner(): Promise<void> {
@@ -274,7 +292,8 @@ export async function mintTo(accounts, num_mint): Promise<void> {
       }
       total += 1;
       var dest = accounts[total % accounts.length];
-      mint_promises.push(testToken.mintTo(dest, mintOwner, [], 42)
+      mint_promises.push(
+        testToken.mintTo(dest, mintOwner, [], 42)
         .then(() => { num_success += 1; })
         .catch(e => {
           console.log("  " + dest + " mint error: " + e);
