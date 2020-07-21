@@ -102,13 +102,44 @@ export async function loadTokenProgram(connection, payer): Promise<void> {
   console.log('Token Program ID', programId.toString());
 }
 
-export async function createMint(connection, payer): Promise<Account> {
-  mintOwner = new Account();
-  testAccountOwner = new Account();
-  const amount = 100000;
+export async function loadOrCreateAccount(file, connection): Account {
+  var account: Account;
+  try {
+    console.log("Loading account from " + file);
+    var buffer = fs.readFileSync(file);
+    account = new Account(Uint8Array.from(buffer));
+    console.log("loaded " + account.publicKey);
+    /*const info = await connection.getAccountInfo(account.publicKey);
+    if (info) {
+      console.log("  using account with " + info.lamports + " lamports.");
+    } else {
+      console.log("  account not loaded yet.");
+    }*/
+  } catch (err) {
+    console.log("account doesn't exist. " + err);
+    var account = new Account();
+    fs.writeFileSync(file, account.secretKey);
+    /*const info = await connection.getAccountInfo(account.publicKey);
+    console.dir(info);
+    if (info) {
+      console.log("  using payer with " + info.lamports + " lamports.");
+    } else {
+      console.log("  account not loaded yet.");
+    }*/
+  }
+
+  return account;
+}
+
+export async function createMint(connection, payer, id): Promise<Account> {
+  mintOwner = await loadOrCreateAccount("accounts/mint_owner_" + id + ".json", connection);
+  var mintAccount = await loadOrCreateAccount("accounts/mint_" + id + ".json", connection);
+  testAccountOwner = await loadOrCreateAccount("accounts/test_owner_" + id + ".json", connection);
+  const amount = 100000000;
   [testToken, testAccount] = await Token.createMint(
     connection,
     payer,
+    mintAccount,
     mintOwner.publicKey,
     testAccountOwner.publicKey,
     new TokenAmount(amount),
@@ -124,12 +155,17 @@ export async function createMint(connection, payer): Promise<Account> {
   const accountInfo = await testToken.getAccountInfo(testAccount);
   assert(accountInfo.mint.equals(testToken.publicKey));
   assert(accountInfo.owner.equals(testAccountOwner.publicKey));
-  assert(accountInfo.amount.toNumber() == amount);
+  //assert(accountInfo.amount.toNumber() == amount);
   assert(accountInfo.delegate == null);
   assert(accountInfo.delegatedAmount.toNumber() == 0);
 }
 
-export async function createAccounts(numAccounts): Promise<void> {
+export async function createAccounts(numAccounts, id): Promise<void> {
+  const balanceNeeded = await Token.getMinBalanceRentForExemptAccount(
+    connection,
+  );
+  console.log("balance needed: " + balanceNeeded);
+
   var destOwners = [];
   var num_success = 0;
   const chunkSize = 10;
@@ -139,11 +175,11 @@ export async function createAccounts(numAccounts): Promise<void> {
   for (var i = 0; i < numChunks; i++) {
     var create_promises = [];
     for (var j = 0; j < chunkSize; j++) {
-      if (total > numAccounts) {
+      if (total >= numAccounts) {
         break;
       }
       total += 1;
-      const destOwner = new Account();
+      const destOwner = await loadOrCreateAccount("accounts/account_" + id + "_" + total +".json", connection);
       create_promises.push(
         testToken.createAccount(destOwner.publicKey)
         .then((account) => {
@@ -176,7 +212,7 @@ export async function createAccounts(numAccounts): Promise<void> {
 }
 
 // 100,000 transfers
-export async function transfer(numTransfer, accounts, owners): Promise<void> {
+export async function token_transfer(numTransfer, accounts, owners, payers): Promise<void> {
   console.log("accounts: " + accounts.length);
   var dests = new Map();
   var num_success = 0;
@@ -184,20 +220,22 @@ export async function transfer(numTransfer, accounts, owners): Promise<void> {
   const accountInfo = await testToken.getAccountInfo(testAccount);
   console.log("account info: " + accountInfo);
   var chunkSize = 10;
-  var numChunks = numTransfer / chunkSize;
+  var numChunks = accounts.length / chunkSize;
   var total = 0;
-  var amount = 10;
+  var amount = 10000;
   // Fund accounts from mint
+  var start = Date.now();
   for (var i = 0; i < numChunks; i++) {
     var transfer_promises = [];
     for (var j = 0; j < chunkSize; j++) {
-      if (total > numTransfer) {
+      if (total > accounts.length) {
         break;
       }
       total += 1;
       const dest = accounts[total % accounts.length];
       //console.log("transfer to " + dest);
-      transfer_promises.push(testToken.transfer(testAccount, dest, testAccountOwner, [], amount)
+      const payer = payers[total % payers.length];
+      transfer_promises.push(testToken.transfer(testAccount, dest, testAccountOwner, [], amount, payer)
         .then(() => {
           num_success += 1;
         })
@@ -215,15 +253,17 @@ export async function transfer(numTransfer, accounts, owners): Promise<void> {
     }
 
     await Promise.all(transfer_promises);
-    console.log("done waiting..");
-    console.log("num_success: " + num_success + " error: " + num_error);
+    if ((Date.now() - start) > 2000) {
+      console.log("transfers: num_success: " + num_success + " error: " + num_error);
+      start = Date.now();
+    }
   }
 
   const NUM_POLL = 10;
   for (var i = 0; i < NUM_POLL; i++) {
     for (let [dest, amount] of dests) {
       let destAccountInfo = await testToken.getAccountInfo(dest);
-      //console.log(dest + " has " + destAccountInfo.amount + " expected: " + amount);
+      console.log(dest + " has " + destAccountInfo.amount + " expected: " + amount);
       if (destAccountInfo.amount.toNumber() === amount) {
         dests.delete(dest);
       }
@@ -238,28 +278,46 @@ export async function transfer(numTransfer, accounts, owners): Promise<void> {
   }
   assert(dests.size == 0);
 
-  console.log("starting inter-account transfers");
+  console.log("starting inter-account transfers " + accounts.length);
   // Do some transfers between accounts.
   num_success = 0;
   num_error = 0;
   if (accounts.length > 2) {
-    var transfer_promises = [];
-    for (var i = 0; i < accounts.length; i += 2) {
-      const src = accounts[i];
-      const srcOwner = owners[i];
-      const dest = accounts[i + 1];
-      transfer_promises.push(
-        testToken.transfer(src, dest, srcOwner, [], 1)
-          .then((x) => {
-            num_success += 1;
-          })
-          .catch(e => {
-            num_error += 1;
-            console.log("transfer error: " + e);
-          })
-      );
+    var chunkSize = 10;
+    var numChunks = numTransfer / chunkSize;
+    var total = 0;
+    var start = Date.now();
+    for (var i = 0; i < numChunks; i++) {
+      var transfer_promises = [];
+      for (var j = 0; j < chunkSize; j++) {
+        if (total >= numTransfer) {
+          break;
+        }
+        const payer = payers[total % payers.length];
+        const src_idx = (total * 2) % accounts.length;
+        const dst_idx = (total * 2 + 1) % accounts.length;
+        const src = accounts[src_idx];
+        const srcOwner = owners[src_idx];
+        const dest = accounts[dst_idx];
+        console.log("transferring " + src_idx + " to " + dst_idx);
+        total += 1;
+        transfer_promises.push(
+          testToken.transfer(src, dest, srcOwner, [], 1, payer)
+            .then((x) => {
+              num_success += 1;
+            })
+            .catch(e => {
+              num_error += 1;
+              console.log("transfer error: " + e);
+            })
+        );
+      }
+      if ((Date.now() - start) > 2000) {
+        console.log("transfers: num_success: " + num_success + " error: " + num_error);
+        start = Date.now();
+      }
+      await Promise.all(transfer_promises);
     }
-    await Promise.all(transfer_promises);
   }
   console.log("done.. success: " + num_success + " error: " + num_error);
 }
@@ -283,8 +341,8 @@ export async function mintTo(accounts, num_mint): Promise<void> {
   const chunkSize = 10;
   const numChunks = num_mint / chunkSize;
   var total = 0;
+  var start = Date.now();
   for (var i = 0; i < numChunks; i++) {
-    var start = Date.now();
     var mint_promises = [];
     for (var j = 0; j < chunkSize; j++) {
       if (total > num_mint) {
@@ -303,7 +361,10 @@ export async function mintTo(accounts, num_mint): Promise<void> {
     }
 
     await Promise.all(mint_promises);
-    console.log("  mint success: " + num_success + " error: " + num_error + " " + (Date.now() - start) + " ms");
+    if ((Date.now() - start) > 2000) {
+      console.log("  mint success: " + num_success + " error: " + num_error + " " + (Date.now() - start) + " ms");
+      start = Date.now();
+    }
   }
 }
 
@@ -316,8 +377,8 @@ export async function burn(accounts, owners, numBurn): Promise<void> {
   var num_success = 0;
   var num_fail = 0;
   var total = 0;
+  var start = Date.now();
   for (var i = 0; i < numChunks; i++) {
-    var start = Date.now();
     for (var j = 0; j < chunkSize; j++) {
       if (total > numBurn) {
         break;
@@ -338,7 +399,10 @@ export async function burn(accounts, owners, numBurn): Promise<void> {
         }));
     }
     await Promise.all(burnPromises);
-    console.log("burned " + numBurned + " success: " + num_success + " num_fail: " + num_fail + " " + (Date.now() - start) + " ms");
+    if ((Date.now() - start) > 2000) {
+      console.log("burned " + numBurned + " success: " + num_success + " num_fail: " + num_fail + " " + (Date.now() - start) + " ms");
+      start = Date.now();
+    }
   }
 
   console.log("Done burning.");

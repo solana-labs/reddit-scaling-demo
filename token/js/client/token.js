@@ -284,6 +284,7 @@ export class Token {
   static async createMint(
     connection: Connection,
     payer: Account,
+    mintAccount: Account,
     mintOwner: PublicKey,
     accountOwner: PublicKey,
     supply: TokenAmount,
@@ -292,9 +293,16 @@ export class Token {
     is_owned: boolean = false,
   ): Promise<TokenAndPublicKey> {
     let transaction;
-    const mintAccount = new Account();
     const token = new Token(connection, mintAccount.publicKey, programId, payer);
     const initialAccountPublicKey = await token.createAccount(accountOwner);
+    const info = await connection.getAccountInfo(mintAccount.publicKey);
+    if (info) {
+      console.log("Mint exists, returning..");
+      return [token, initialAccountPublicKey];
+    } else {
+      console.log("Creating mint..");
+    }
+
 
     // Allocate memory for the account
     const balanceNeeded = await Token.getMinBalanceRentForExemptMint(
@@ -600,6 +608,7 @@ export class Token {
     authority: Account | PublicKey,
     multiSigners: Array<Account>,
     amount: number | TokenAmount,
+    payer: Account,
   ): Promise<?TransactionSignature> {
     let ownerPublicKey;
     let signers;
@@ -622,7 +631,7 @@ export class Token {
           amount,
         ),
       ),
-      this.payer,
+      payer,
       ...signers
     );
   }

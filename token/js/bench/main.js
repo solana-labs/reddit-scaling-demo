@@ -14,7 +14,7 @@ import {
   loadTokenProgram,
   createMint,
   createAccounts,
-  transfer,
+  token_transfer,
   approveRevoke,
   invalidApprove,
   failOnApproveOverspend,
@@ -28,13 +28,17 @@ import {
 } from './token-test';
 import {Store} from '../client/util/store';
 import {Account} from '@solana/web3.js';
+import {SystemProgram, TransferParams} from '@solana/web3.js';
 import {newAccountWithLamports} from '../client/util/new-account-with-lamports';
+import {sendAndConfirmTransaction} from '../client/util/send-and-confirm-transaction';
 const {argv} = require('yargs')
   .require("num_accounts")
   .require("num_transfer")
   .require("num_burn")
   .require("num_mint")
   .require("payer_account")
+  .require("id")
+  .require("num_payers")
 
 const fs = require('fs');
 
@@ -42,6 +46,7 @@ async function main() {
   const connection = await getConnection();
 
   var payer: Account;
+  var payer_balance;
   try {
     console.log("Loading payer account from " + argv.payer_account);
     var payer_buffer = fs.readFileSync(argv.payer_account);
@@ -49,6 +54,7 @@ async function main() {
     console.log("loaded " + payer.publicKey);
     const info = await connection.getAccountInfo(payer.publicKey);
     console.log("  using payer with " + info.lamports + " lamports.");
+    payer_balance = info.lamports;
   } catch (err) {
     console.log("Payer account doesn't exist. " + err);
     var payer_account = await newAccountWithLamports(connection, 100000000000);
@@ -56,6 +62,20 @@ async function main() {
     payer = payer_account;
     const info = await connection.getAccountInfo(payer.publicKey);
     console.log("  using payer with " + info.lamports + " lamports.");
+    payer_balance = info.lamports;
+  }
+
+  var payers = [];
+  for (var i = 0; i < argv.num_payers; i++) {
+    var new_payer = new Account();
+    var params: TransferParams = {
+      fromPubkey: payer.publicKey,
+      toPubkey: new_payer.publicKey,
+      lamports: 100,
+    };
+    var tx = SystemProgram.transfer(params);
+    await sendAndConfirmTransaction('fund payers', connection, tx, payer);
+    payers.push(new_payer);
   }
 
   var start = Date.now();
@@ -66,19 +86,19 @@ async function main() {
 
   console.log('Creating reddit token mint account..');
   start = Date.now();
-  var mintOwner = await createMint(connection, payer);
+  var mintOwner = await createMint(connection, payer, argv.id);
   const mint_create_time = (Date.now() - start);
   console.log("  mint created in " + mint_create_time + " ms");
 
   console.log('Creating subreddit accounts.. ' + argv.num_accounts);
   start = Date.now();
-  var [accounts, owners] = await createAccounts(argv.num_accounts);
+  var [accounts, owners] = await createAccounts(argv.num_accounts, argv.id);
   const create_time = (Date.now() - start);
   console.log("  accounts created in " + create_time + " ms");
 
   console.log('Starting transfers ' + argv.num_transfer);
   start = Date.now();
-  await transfer(argv.num_transfer, accounts, owners);
+  await token_transfer(argv.num_transfer, accounts, owners, payers);
   const transfer_time = (Date.now() - start);
   console.log("  transfers took " + transfer_time + " ms");
 
@@ -93,6 +113,9 @@ async function main() {
   await burn(accounts, owners, argv.num_burn);
   const burn_time = (Date.now() - start);
   console.log("  burn took " + burn_time + " ms");
+
+  const info = await connection.getAccountInfo(payer.publicKey);
+  console.log("  payer now has " + info.lamports + " lamports. Took " + (payer_balance - info.lamports));
 
   console.log("Summary:");
   console.log(" loaded token program in " + load_token_time + " ms");
