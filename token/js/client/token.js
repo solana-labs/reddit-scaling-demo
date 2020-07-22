@@ -287,6 +287,7 @@ export class Token {
     mintAccount: Account,
     mintOwner: PublicKey,
     accountOwner: PublicKey,
+    initialTokenAccount: Account,
     supply: TokenAmount,
     decimals: number,
     programId: PublicKey,
@@ -294,7 +295,7 @@ export class Token {
   ): Promise<TokenAndPublicKey> {
     let transaction;
     const token = new Token(connection, mintAccount.publicKey, programId, payer);
-    const initialAccountPublicKey = await token.createAccount(accountOwner);
+    const initialAccountPublicKey = await token.createAccount(accountOwner, initialTokenAccount);
     const info = await connection.getAccountInfo(mintAccount.publicKey);
     if (info) {
       console.log("Mint exists, returning..");
@@ -376,8 +377,8 @@ export class Token {
    */
   async createAccount(
     owner: PublicKey,
+    mintAccount: Account,
   ): Promise<PublicKey> {
-    const mintAccount = new Account();
     let transaction;
 
     // Allocate memory for the account
@@ -521,7 +522,14 @@ export class Token {
    * @param account Public key of the account
    */
   async getAccountInfo(account: PublicKey): Promise<AccountInfo> {
-    const info = await this.connection.getAccountInfo(account);
+    var info = null;
+    for (var i = 0; i < 10; i++) {
+      try {
+        info = await this.connection.getAccountInfo(account);
+        break;
+      } catch(e) {
+      }
+    }
     if (info === null) {
       throw new Error('Failed to find account');
     }

@@ -42,7 +42,18 @@ export async function getConnection(): Promise<Connection> {
   if (connection) return connection;
 
   let newConnection = new Connection(url, 'recent', );
-  const version = await newConnection.getVersion();
+  console.log("get version");
+  var version = null;
+  for (var i = 0; i < 20; i++) {
+    try {
+      version = await newConnection.getVersion();
+      break;
+    } catch (e) {
+      console.log("error: " + e);
+      await sleep(200);
+    }
+  }
+  console.log("done");
 
   // commitment params are only supported >= 0.21.0
   const solanaCoreVersion = version['solana-core'].split(' ')[0];
@@ -135,12 +146,14 @@ export async function createMint(connection, payer, id, amount): Promise<Account
   mintOwner = await loadOrCreateAccount("accounts/mint_owner_" + id + ".json", connection);
   var mintAccount = await loadOrCreateAccount("accounts/mint_" + id + ".json", connection);
   testAccountOwner = await loadOrCreateAccount("accounts/test_owner_" + id + ".json", connection);
+  var initialTokenAccount = await loadOrCreateAccount("accounts/first_token_account_" + id + ".json", connection);
   [testToken, testAccount] = await Token.createMint(
     connection,
     payer,
     mintAccount,
     mintOwner.publicKey,
     testAccountOwner.publicKey,
+    initialTokenAccount,
     new TokenAmount(amount),
     2,
     programId,
@@ -185,7 +198,7 @@ export async function createAccounts(numAccounts, id): Promise<void> {
       total += 1;
       const destOwner = await loadOrCreateAccount("accounts/account_" + id + "_" + total +".json", connection);
       create_promises.push(
-        testToken.createAccount(destOwner.publicKey)
+        testToken.createAccount(destOwner.publicKey, destOwner)
         .then((account) => {
           num_success += 1;
           return account;

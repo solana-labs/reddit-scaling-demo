@@ -43,7 +43,9 @@ const {argv} = require('yargs')
 const fs = require('fs');
 
 async function main() {
+  console.log("Making connection");
   const connection = await getConnection();
+  console.log("done.");
 
   var payer: Account;
   var payer_balance;
