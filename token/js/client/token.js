@@ -741,11 +741,10 @@ export class Token {
   /**
    * Mint new tokens
    *
-   * @param mint Public key of the mint
    * @param dest Public key of the account to mint to
    * @param authority Owner of the mint
    * @param multiSigners Signing accounts if `authority` is a multiSig
-   * @param amount ammount to mint
+   * @param amount amount to mint
    */
   async mintTo(
     dest: PublicKey,
@@ -784,6 +783,7 @@ export class Token {
     authority: Account | PublicKey,
     multiSigners: Array<Account>,
     amount: number,
+    payer: Account,
   ): Promise<void> {
     let ownerPublicKey;
     let signers;
@@ -798,7 +798,7 @@ export class Token {
       'Burn',
       this.connection,
       new Transaction().add(this.burnInstruction(account, ownerPublicKey, multiSigners, amount)),
-      this.payer,
+      payer,
       ...signers,
     );
   }

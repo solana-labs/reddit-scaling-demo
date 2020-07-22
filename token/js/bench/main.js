@@ -65,13 +65,21 @@ async function main() {
     payer_balance = info.lamports;
   }
 
+  const blockhash = await connection.getRecentBlockhashAndContext();
+  //console.dir(blockhash);
+  const perSig = blockhash.value.feeCalculator.lamportsPerSignature;
+  console.log("fees: " + perSig);
+  var totalFees = 2 * perSig * (argv.num_transfer + (2 * argv.num_accounts) + argv.num_mint + argv.num_burn);
+  console.log("total fees: " + totalFees);
+  var feesPerPayer = Math.ceil(totalFees / argv.num_payers);
+  console.log("funding " + argv.num_payers + " with " + feesPerPayer + " fees.");
   var payers = [];
   for (var i = 0; i < argv.num_payers; i++) {
     var new_payer = new Account();
     var params: TransferParams = {
       fromPubkey: payer.publicKey,
       toPubkey: new_payer.publicKey,
-      lamports: 100,
+      lamports: feesPerPayer,
     };
     var tx = SystemProgram.transfer(params);
     await sendAndConfirmTransaction('fund payers', connection, tx, payer);
@@ -86,7 +94,8 @@ async function main() {
 
   console.log('Creating reddit token mint account..');
   start = Date.now();
-  var mintOwner = await createMint(connection, payer, argv.id);
+  var mintAmount = argv.num_accounts * argv.num_transfer * 10;
+  var mintOwner = await createMint(connection, payer, argv.id, mintAmount);
   const mint_create_time = (Date.now() - start);
   console.log("  mint created in " + mint_create_time + " ms");
 
@@ -98,7 +107,7 @@ async function main() {
 
   console.log('Starting transfers ' + argv.num_transfer);
   start = Date.now();
-  await token_transfer(argv.num_transfer, accounts, owners, payers);
+  await token_transfer(argv.num_transfer, accounts, owners, payers, (mintAmount / argv.num_accounts));
   const transfer_time = (Date.now() - start);
   console.log("  transfers took " + transfer_time + " ms");
 
@@ -110,9 +119,23 @@ async function main() {
 
   console.log('Burning subreddit tokens.. ' + argv.num_burn);
   start = Date.now();
-  await burn(accounts, owners, argv.num_burn);
+  await burn(accounts, owners, argv.num_burn, payers);
   const burn_time = (Date.now() - start);
   console.log("  burn took " + burn_time + " ms");
+
+  for (var i = 0; i < payers.length; i++) {
+    const info = await connection.getAccountInfo(payers[i].publicKey);
+    console.log("  payer " + i + " now has " + info.lamports + " lamports.");
+
+    var params: TransferParams = {
+      fromPubkey: payers[i].publicKey,
+      toPubkey: payer.publicKey,
+      lamports: info.lamports - (2 * perSig),
+    };
+
+    var tx = SystemProgram.transfer(params);
+    await sendAndConfirmTransaction('defund payers', connection, tx, payers[i]);
+  }
 
   const info = await connection.getAccountInfo(payer.publicKey);
   console.log("  payer now has " + info.lamports + " lamports. Took " + (payer_balance - info.lamports));
