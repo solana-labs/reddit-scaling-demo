@@ -147,6 +147,7 @@ export async function createMint(connection, payer, id, amount): Promise<Account
   var mintAccount = await loadOrCreateAccount("accounts/mint_" + id + ".json", connection);
   testAccountOwner = await loadOrCreateAccount("accounts/test_owner_" + id + ".json", connection);
   var initialTokenAccount = await loadOrCreateAccount("accounts/first_token_account_" + id + ".json", connection);
+  console.log("creating mint..");
   [testToken, testAccount] = await Token.createMint(
     connection,
     payer,
@@ -159,8 +160,10 @@ export async function createMint(connection, payer, id, amount): Promise<Account
     programId,
     true,
   );
+  console.log("done.");
 
   const mintInfo = await testToken.getMintInfo();
+  console.dir(mintInfo);
   assert(mintInfo.decimals == 2);
   //assert(mintInfo.owner == null);
 
@@ -196,9 +199,10 @@ export async function createAccounts(numAccounts, id): Promise<void> {
         break;
       }
       total += 1;
-      const destOwner = await loadOrCreateAccount("accounts/account_" + id + "_" + total +".json", connection);
+      const destOwner = await loadOrCreateAccount("accounts/account_owner_" + id + "_" + total + ".json", connection);
+      const newAccount = await loadOrCreateAccount("accounts/account_" + id + "_" + total + ".json", connection);
       create_promises.push(
-        testToken.createAccount(destOwner.publicKey, destOwner)
+        testToken.createAccount(destOwner.publicKey, newAccount)
         .then((account) => {
           num_success += 1;
           return account;
@@ -219,10 +223,12 @@ export async function createAccounts(numAccounts, id): Promise<void> {
   for (var i = 0; i < accounts.length; i++) {
     let account = accounts[i];
     let destOwner = destOwners[i];
+    console.log("Getting info for " + account);
     const accountInfo = await testToken.getAccountInfo(account);
     assert(accountInfo.mint.equals(testToken.publicKey));
     assert(accountInfo.owner.equals(destOwner.publicKey));
-    assert(accountInfo.amount.toNumber() == 0);
+    console.log(account + " has " + accountInfo.amount);
+    //assert(accountInfo.amount.toNumber() == 0);
     assert(accountInfo.delegate == null);
   }
   return [accounts, destOwners];
@@ -243,6 +249,14 @@ export async function token_transfer(numTransfer, accounts, owners, payers, amou
   var chunkSize = 10;
   var numChunks = accounts.length / chunkSize;
   var total = 0;
+
+  for (var i = 0; i < accounts.length; i++) {
+    let initial_balance = await testToken.getAccountInfo(accounts[i]);
+    if (initial_balance) {
+      dests.set(accounts[i], initial_balance.amount.toNumber());
+    }
+  }
+
   // Fund accounts from mint
   var start = Date.now();
   for (var i = 0; i < numChunks; i++) {

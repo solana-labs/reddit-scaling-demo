@@ -295,8 +295,13 @@ export class Token {
   ): Promise<TokenAndPublicKey> {
     let transaction;
     const token = new Token(connection, mintAccount.publicKey, programId, payer);
-    const initialAccountPublicKey = await token.createAccount(accountOwner, initialTokenAccount);
-    const info = await connection.getAccountInfo(mintAccount.publicKey);
+    console.log("creating account:");
+    var initialAccountPublicKey = initialTokenAccount.publicKey;
+    var info = await connection.getAccountInfo(initialTokenAccount.publicKey);
+    if (!info) {
+      const key = await token.createAccount(accountOwner, initialTokenAccount);
+    }
+    info = await connection.getAccountInfo(mintAccount.publicKey);
     if (info) {
       console.log("Mint exists, returning..");
       return [token, initialAccountPublicKey];
@@ -312,7 +317,7 @@ export class Token {
     transaction = SystemProgram.createAccount({
       fromPubkey: payer.publicKey,
       newAccountPubkey: mintAccount.publicKey,
-      lamports: balanceNeeded,
+      lamports: balanceNeeded / 8,
       space: MintLayout.span,
       programId,
     });
@@ -380,6 +385,12 @@ export class Token {
     mintAccount: Account,
   ): Promise<PublicKey> {
     let transaction;
+    const info = await this.connection.getAccountInfo(mintAccount.publicKey);
+    if (info) {
+      console.log(mintAccount.publicKey + " account already created");
+      console.dir(info);
+      return mintAccount.publicKey;
+    }
 
     // Allocate memory for the account
     const balanceNeeded = await Token.getMinBalanceRentForExemptAccount(
@@ -388,7 +399,7 @@ export class Token {
     transaction = SystemProgram.createAccount({
       fromPubkey: this.payer.publicKey,
       newAccountPubkey: mintAccount.publicKey,
-      lamports: balanceNeeded,
+      lamports: balanceNeeded / 8,
       space: AccountLayout.span,
       programId: this.programId,
     });
@@ -413,6 +424,7 @@ export class Token {
       data,
     });
 
+    console.log("system program create account");
     // Send the two instructions
     await sendAndConfirmTransaction(
       'createAccount and InitializeAccount',
@@ -421,6 +433,7 @@ export class Token {
       this.payer,
       mintAccount
     );
+    console.log("done");
 
     return mintAccount.publicKey;
   }
