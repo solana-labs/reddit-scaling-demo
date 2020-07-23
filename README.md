@@ -21,8 +21,10 @@ $ ./do.sh build <program>
 
 Set the RPC_URL environment variable to point to the cluster desired:
 
+```bash
 export RPC_URL=https://testnet.solana.com
 export RPC_URL=https://api.mainnet-beta.solana.com
+```
 
 You'll need npm installed, then perform the following:
 
