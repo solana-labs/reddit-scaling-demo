@@ -43,3 +43,11 @@ adjusting the arguments to the desired accounts/tranfers to generate:
 ```bash
 $ npm run bench -- --num_accounts 10 --num_transfer 1000 --num_burn 1000 --num_mint 10 --payer_account payer.json --id 0 --num_payers 4
 ```
+
+To run more than one instance, there is another script run.sh:
+
+```bash
+./run.sh <number-of-instances>
+```
+
+That will run a number of demo programs in parallel.
