@@ -83,7 +83,7 @@ async function loadProgram(connection: Connection, payer, path: string): Promise
   return program_account.publicKey;
 }
 
-async function GetPrograms(connection: Connection, payer: Account): Promise<PublicKey> {
+async function GetPrograms(connection: Connection, payer: Account, verbose: boolean = false): Promise<PublicKey> {
   const store = new Store();
   let tokenProgramId = null;
   try {
@@ -93,7 +93,10 @@ async function GetPrograms(connection: Connection, payer: Account): Promise<Publ
     tokenProgramId = new PublicKey(config.tokenProgramId);
     console.log("Checking that account exists..");
     const info = await connection.getAccountInfo(tokenProgramId);
-    console.log(".. got account info: " + info);
+    if (verbose) {
+      console.log(".. got account info: ");
+      console.dir(info);
+    }
     if (info === null) {
       console.log("account doesn't exist..creating new");
       throw new Error('failed to find account');
@@ -113,13 +116,17 @@ export async function loadTokenProgram(connection, payer): Promise<void> {
   console.log('Token Program ID', programId.toString());
 }
 
-export async function loadOrCreateAccount(file, connection): Account {
+export async function loadOrCreateAccount(file, connection, verbose: boolean = false): Account {
   var account: Account;
   try {
-    console.log("Loading account from " + file);
+    if (verbose) {
+      console.log("Loading account from " + file);
+    }
     var buffer = fs.readFileSync(file);
     account = new Account(Uint8Array.from(buffer));
-    console.log("loaded " + account.publicKey);
+    if (verbose) {
+      console.log("loaded " + account.publicKey);
+    }
     /*const info = await connection.getAccountInfo(account.publicKey);
     if (info) {
       console.log("  using account with " + info.lamports + " lamports.");
@@ -127,7 +134,9 @@ export async function loadOrCreateAccount(file, connection): Account {
       console.log("  account not loaded yet.");
     }*/
   } catch (err) {
-    console.log("account doesn't exist. " + err);
+    if (verbose) {
+      console.log("account doesn't exist. " + err);
+    }
     var account = new Account();
     fs.writeFileSync(file, account.secretKey);
     /*const info = await connection.getAccountInfo(account.publicKey);
@@ -142,7 +151,7 @@ export async function loadOrCreateAccount(file, connection): Account {
   return account;
 }
 
-export async function createMint(connection, payer, id, amount): Promise<Account> {
+export async function createMint(connection, payer, id, amount, verbose): Promise<Account> {
   mintOwner = await loadOrCreateAccount("accounts/mint_owner_" + id + ".json", connection);
   var mintAccount = await loadOrCreateAccount("accounts/mint_" + id + ".json", connection);
   testAccountOwner = await loadOrCreateAccount("accounts/test_owner_" + id + ".json", connection);
@@ -163,7 +172,9 @@ export async function createMint(connection, payer, id, amount): Promise<Account
   console.log("done.");
 
   const mintInfo = await testToken.getMintInfo();
-  console.dir(mintInfo);
+  if (verbose) {
+    console.dir(mintInfo);
+  }
   assert(mintInfo.decimals == 2);
   //assert(mintInfo.owner == null);
 
@@ -180,7 +191,7 @@ export async function createMint(connection, payer, id, amount): Promise<Account
   assert(accountInfo.delegatedAmount.toNumber() == 0);
 }
 
-export async function createAccounts(numAccounts, id): Promise<void> {
+export async function createAccounts(numAccounts, id, verbose): Promise<void> {
   const balanceNeeded = await Token.getMinBalanceRentForExemptAccount(
     connection,
   );
@@ -202,7 +213,7 @@ export async function createAccounts(numAccounts, id): Promise<void> {
       const destOwner = await loadOrCreateAccount("accounts/account_owner_" + id + "_" + total + ".json", connection);
       const newAccount = await loadOrCreateAccount("accounts/account_" + id + "_" + total + ".json", connection);
       create_promises.push(
-        testToken.createAccount(destOwner.publicKey, newAccount)
+        testToken.createAccount(destOwner.publicKey, newAccount, balanceNeeded / 8)
         .then((account) => {
           num_success += 1;
           return account;
@@ -223,11 +234,15 @@ export async function createAccounts(numAccounts, id): Promise<void> {
   for (var i = 0; i < accounts.length; i++) {
     let account = accounts[i];
     let destOwner = destOwners[i];
-    console.log("Getting info for " + account);
+    if (verbose) {
+      console.log("Getting info for " + account);
+    }
     const accountInfo = await testToken.getAccountInfo(account);
     assert(accountInfo.mint.equals(testToken.publicKey));
     assert(accountInfo.owner.equals(destOwner.publicKey));
-    console.log(account + " has " + accountInfo.amount);
+    if (verbose) {
+      console.log(account + " has " + accountInfo.amount);
+    }
     //assert(accountInfo.amount.toNumber() == 0);
     assert(accountInfo.delegate == null);
   }
@@ -235,8 +250,10 @@ export async function createAccounts(numAccounts, id): Promise<void> {
 }
 
 // 100,000 transfers
-export async function token_transfer(numTransfer, accounts, owners, payers, amount): Promise<void> {
-  console.log("accounts: " + accounts.length);
+export async function token_transfer(numTransfer, accounts, owners, payers, amount, verbose): Promise<void> {
+  if (verbose) {
+    console.log("accounts: " + accounts.length);
+  }
   var dests = new Map();
   var num_success = 0;
   var num_error = 0;
@@ -297,13 +314,17 @@ export async function token_transfer(numTransfer, accounts, owners, payers, amou
   for (var i = 0; i < NUM_POLL; i++) {
     for (let [dest, amount] of dests) {
       let destAccountInfo = await testToken.getAccountInfo(dest);
-      console.log(dest + " has " + destAccountInfo.amount + " expected: " + amount);
+      if (verbose) {
+        console.log(dest + " has " + destAccountInfo.amount + " expected: " + amount);
+      }
       if (destAccountInfo.amount.toNumber() === amount) {
         dests.delete(dest);
       }
     }
 
-    console.log("accounts left: " + dests.size);
+    if (verbose) {
+      console.log("accounts left: " + dests.size);
+    }
     if (dests.size == 0) {
       break;
     }
@@ -346,7 +367,7 @@ export async function token_transfer(numTransfer, accounts, owners, payers, amou
             })
         );
       }
-      if ((Date.now() - start) > 2000) {
+      if ((Date.now() - start) > 10000) {
         console.log("transfers: num_success: " + num_success + " error: " + num_error);
         start = Date.now();
       }
@@ -354,16 +375,6 @@ export async function token_transfer(numTransfer, accounts, owners, payers, amou
     }
   }
   console.log("done.. success: " + num_success + " error: " + num_error);
-}
-
-export async function setOwner(): Promise<void> {
-  const owner = new Account();
-  const newOwner = new Account();
-  const owned = await testToken.createAccount(owner.publicKey);
-
-  await testToken.setOwner(owned, newOwner.publicKey, owner, []);
-  assert(didThrow(testToken.setOwner, [owned, newOwner.publicKey, owner, []]));
-  await testToken.setOwner(owned, owner.publicKey,newOwner, []);
 }
 
 // 100,000 mint
@@ -395,7 +406,7 @@ export async function mintTo(accounts, num_mint): Promise<void> {
     }
 
     await Promise.all(mint_promises);
-    if ((Date.now() - start) > 2000) {
+    if ((Date.now() - start) > 10000) {
       console.log("  mint success: " + num_success + " error: " + num_error + " " + (Date.now() - start) + " ms");
       start = Date.now();
     }
@@ -448,42 +459,5 @@ export async function burn(accounts, owners, numBurn, payers): Promise<void> {
     }
     await sleep(100);
   }*/
-}
-
-export async function closeAccount(): Promise<void> {
-  const connection = await getConnection();
-  const owner = new Account();
-  const close = await testToken.createAccount(owner.publicKey);
-
-  let close_balance;
-  let info = await connection.getAccountInfo(close);
-  if (info != null) {
-    close_balance = info.lamports;
-  } else {
-    throw new Error('Account not found');
-  }
-
-  const balanceNeeded =
-    await connection.getMinimumBalanceForRentExemption(0);
-  const dest = await newAccountWithLamports(connection, balanceNeeded);
-
-  info = await connection.getAccountInfo(dest.publicKey);
-  if (info != null) {
-    assert(info.lamports == balanceNeeded);
-  } else {
-    throw new Error('Account not found');
-  }
-
-  await testToken.closeAccount(close, dest.publicKey, owner, []);
-  info = await connection.getAccountInfo(close);
-  if (info != null) {
-    throw new Error('Account not closed');
-  }
-  info = await connection.getAccountInfo(dest.publicKey);
-  if (info != null) {
-    assert(info.lamports == balanceNeeded + close_balance);
-  } else {
-    throw new Error('Account not found');
-  }
 }
 

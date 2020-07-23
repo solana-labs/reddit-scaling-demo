@@ -299,7 +299,10 @@ export class Token {
     var initialAccountPublicKey = initialTokenAccount.publicKey;
     var info = await connection.getAccountInfo(initialTokenAccount.publicKey);
     if (!info) {
-      const key = await token.createAccount(accountOwner, initialTokenAccount);
+      const balanceNeeded = await Token.getMinBalanceRentForExemptAccount(
+        connection,
+      );
+      const key = await token.createAccount(accountOwner, initialTokenAccount, balanceNeeded / 8);
     }
     info = await connection.getAccountInfo(mintAccount.publicKey);
     if (info) {
@@ -383,23 +386,20 @@ export class Token {
   async createAccount(
     owner: PublicKey,
     mintAccount: Account,
+    balance: number,
   ): Promise<PublicKey> {
     let transaction;
     const info = await this.connection.getAccountInfo(mintAccount.publicKey);
     if (info) {
-      console.log(mintAccount.publicKey + " account already created");
-      console.dir(info);
+      //console.log(mintAccount.publicKey + " account already created");
+      //console.dir(info);
       return mintAccount.publicKey;
     }
 
-    // Allocate memory for the account
-    const balanceNeeded = await Token.getMinBalanceRentForExemptAccount(
-      this.connection,
-    );
     transaction = SystemProgram.createAccount({
       fromPubkey: this.payer.publicKey,
       newAccountPubkey: mintAccount.publicKey,
-      lamports: balanceNeeded / 8,
+      lamports: balance,
       space: AccountLayout.span,
       programId: this.programId,
     });
@@ -424,7 +424,6 @@ export class Token {
       data,
     });
 
-    console.log("system program create account");
     // Send the two instructions
     await sendAndConfirmTransaction(
       'createAccount and InitializeAccount',
@@ -433,7 +432,6 @@ export class Token {
       this.payer,
       mintAccount
     );
-    console.log("done");
 
     return mintAccount.publicKey;
   }

@@ -31,6 +31,7 @@ import {Account} from '@solana/web3.js';
 import {SystemProgram, TransferParams} from '@solana/web3.js';
 import {newAccountWithLamports} from '../client/util/new-account-with-lamports';
 import {sendAndConfirmTransaction} from '../client/util/send-and-confirm-transaction';
+import mkdirp from 'mkdirp-promise';
 const {argv} = require('yargs')
   .require("num_accounts")
   .require("num_transfer")
@@ -43,6 +44,7 @@ const {argv} = require('yargs')
 const fs = require('fs');
 
 async function main() {
+  await mkdirp("accounts");
   console.log("Making connection");
   const connection = await getConnection();
   console.log("done.");
@@ -70,9 +72,13 @@ async function main() {
   const blockhash = await connection.getRecentBlockhashAndContext();
   //console.dir(blockhash);
   const perSig = blockhash.value.feeCalculator.lamportsPerSignature;
-  console.log("fees: " + perSig);
+  if (argv.v) {
+    console.log("fees: " + perSig);
+  }
   var totalFees = 2 * perSig * (argv.num_transfer + (2 * argv.num_accounts) + argv.num_mint + argv.num_burn);
-  console.log("total fees: " + totalFees);
+  if (argv.v) {
+    console.log("total fees: " + totalFees);
+  }
   var feesPerPayer = Math.ceil(totalFees / argv.num_payers);
   console.log("funding " + argv.num_payers + " with " + feesPerPayer + " fees.");
   var payers = [];
@@ -90,26 +96,26 @@ async function main() {
 
   var start = Date.now();
   console.log('Starting reddit test: loading token program..');
-  await loadTokenProgram(connection, payer);
+  await loadTokenProgram(connection, payer, argv.v);
   const load_token_time = (Date.now() - start);
   console.log("loaded in " + load_token_time + " ms");
 
   console.log('Creating reddit token mint account..');
   start = Date.now();
   var mintAmount = argv.num_accounts * argv.num_transfer * 10;
-  var mintOwner = await createMint(connection, payer, argv.id, mintAmount);
+  var mintOwner = await createMint(connection, payer, argv.id, mintAmount, argv.v);
   const mint_create_time = (Date.now() - start);
   console.log("  mint created in " + mint_create_time + " ms");
 
   console.log('Creating subreddit accounts.. ' + argv.num_accounts);
   start = Date.now();
-  var [accounts, owners] = await createAccounts(argv.num_accounts, argv.id);
+  var [accounts, owners] = await createAccounts(argv.num_accounts, argv.id, argv.v);
   const create_time = (Date.now() - start);
   console.log("  accounts created in " + create_time + " ms");
 
   console.log('Starting transfers ' + argv.num_transfer);
   start = Date.now();
-  await token_transfer(argv.num_transfer, accounts, owners, payers, (mintAmount / argv.num_accounts));
+  await token_transfer(argv.num_transfer, accounts, owners, payers, (mintAmount / argv.num_accounts), argv.v);
   const transfer_time = (Date.now() - start);
   console.log("  transfers took " + transfer_time + " ms");
 
