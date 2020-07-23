@@ -3,7 +3,7 @@
 Source for Solana Reddit demo, which uses the solana token program to run the Reddit benchmark challenge.
 This is a fork of the solana-program-library repo.
 
-## Building
+## Build the token program
 
 These programs cannot be built directly via cargo and instead require the build scripts located in Solana's BPF-SDK.
 
@@ -12,12 +12,7 @@ Download or update the BPF-SDK by running:
 $ ./do.sh update
 ```
 
-To build all programs, run:
-```bash
-$ ./do.sh build
-```
-
-Or choose a specific program:
+Build the token program:
 ```bash
 $ ./do.sh build <program>
 ```
