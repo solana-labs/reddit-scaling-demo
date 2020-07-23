@@ -30,6 +30,7 @@ You'll need npm installed, then perform the following:
 
 ```bash
 $ cd token/js
+$ npm install
 $ npm run bench -- --num_accounts 1 --num_transfer 1 --num_burn 1 --num_mint 1 --payer_account payer.json --id 0 --num_payers 4
 ```
 
