@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://solana.com">
+    <img alt="Solana" src="https://i.imgur.com/OMnvVEz.png" width="250" />
+  </a>
+</p>
+
 # Solana Reddit Demo
 
 Source for Solana Reddit demo, which uses the solana token program to run the Reddit benchmark challenge.
