@@ -19,11 +19,16 @@ $ ./do.sh build <program>
 
 ## Running the token demo
 
+Set the RPC_URL environment variable to point to the cluster desired:
+
+export RPC_URL=https://testnet.solana.com
+export RPC_URL=https://api.mainnet-beta.solana.com
+
 You'll need npm installed, then perform the following:
 
 ```bash
 $ cd token/js
-$ npm run bench -- --num_accounts 1 --num_transfer 1 --num_burn 1 --num_mint 1 --payer_account payer.json --id $i --num_payers
+$ npm run bench -- --num_accounts 1 --num_transfer 1 --num_burn 1 --num_mint 1 --payer_account payer.json --id 0 --num_payers 4
 ```
 
 That should print a message like:
@@ -33,5 +38,5 @@ That should print a message like:
 If the network you are running on doesn't have a faucet, then fund that key with some sol, then run the program again,
 adjusting the arguments to the desired accounts/tranfers to generate:
 ```bash
-$ npm run bench -- --num_accounts 10 --num_transfer 1000 --num_burn 1000 --num_mint 10 --payer_account payer.json --id $i --num_payers
+$ npm run bench -- --num_accounts 10 --num_transfer 1000 --num_burn 1000 --num_mint 10 --payer_account payer.json --id 0 --num_payers 4
 ```
