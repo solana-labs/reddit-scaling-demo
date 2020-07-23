@@ -1,16 +1,7 @@
-[![Build status][travis-image]][travis-url]
+# Solana Reddit Demo
 
-[travis-image]: https://travis-ci.org/solana-labs/solana-program-library.svg?branch=master
-[travis-url]: https://travis-ci.org/solana-labs/solana-program-library
-
-# Solana Program Library
-
-The Solana Program Library (SPL) is a collection of on-chain programs targeting
-the [Sealevel parallel runtime](https://medium.com/solana-labs/sealevel-parallel-processing-thousands-of-smart-contracts-d814b378192).
-These programs are tested against Solana's implementation
-of Sealevel, solana-runtime, and deployed to its mainnet.  As others implement
-Sealevel, we will graciously accept patches to ensure the programs here are
-portable across all implementations.
+Source for Solana Reddit demo, which uses the solana token program to run the Reddit benchmark challenge.
+This is a fork of the solana-program-library repo.
 
 ## Building
 
@@ -31,28 +22,21 @@ Or choose a specific program:
 $ ./do.sh build <program>
 ```
 
-## Testing
+## Running the token demo
 
-Unit tests contained within all projects can be built via:
+You'll need npm installed, then perform the following:
+
 ```bash
-$ ./do.sh test
+$ cd token/js
+$ npm run bench -- --num_accounts 1 --num_transfer 1 --num_burn 1 --num_mint 1 --payer_account payer.json --id $i --num_payers
 ```
 
-Or:
+That should print a message like:
+> Loading payer account from payer.json
+> loaded 9Rd5aWW84WtnM2QznNHqN1FmtEyb6hUf4eewp9BFBvE1
+
+If the network you are running on doesn't have a faucet, then fund that key with some sol, then run the program again,
+adjusting the arguments to the desired accounts/tranfers to generate:
 ```bash
-$ ./do.sh test <program>
-```
-
-End-to-end testing may be performed via the per-project .js bindings.  See the [token program's js project](token/js) for an example.
-
-## Clippy
-
-Clippy is also supported via:
-```bash
-$ ./do.sh clippy
-```
-
-Or:
-```
-$ ./do.sh clippy <program>
+$ npm run bench -- --num_accounts 10 --num_transfer 1000 --num_burn 1000 --num_mint 10 --payer_account payer.json --id $i --num_payers
 ```
