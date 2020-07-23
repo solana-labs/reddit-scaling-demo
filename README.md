@@ -4,7 +4,7 @@
   </a>
 </p>
 
-# Solana Reddit Demo
+# Reddit Demo
 
 Source for Solana Reddit demo, which uses the solana token program to run the Reddit benchmark challenge.
 This is a fork of the solana-program-library repo.
