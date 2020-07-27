@@ -286,7 +286,7 @@ export async function token_transfer(numTransfer, accounts, owners, payers, amou
   for (var i = 0; i < numChunks; i++) {
     var transfer_promises = [];
     for (var j = 0; j < chunkSize; j++) {
-      if (total > accounts.length) {
+      if (total >= accounts.length) {
         break;
       }
       total += 1;
