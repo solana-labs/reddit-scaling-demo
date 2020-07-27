@@ -2,6 +2,7 @@
  * @flow
  */
 
+import {sleep} from '../client/util/sleep';
 import assert from 'assert';
 import BN from 'bn.js';
 import * as BufferLayout from 'buffer-layout';
@@ -297,12 +298,29 @@ export class Token {
     const token = new Token(connection, mintAccount.publicKey, programId, payer);
     console.log("creating account:");
     var initialAccountPublicKey = initialTokenAccount.publicKey;
-    var info = await connection.getAccountInfo(initialTokenAccount.publicKey);
+    var info = null;
+    for (var i = 0; i < 10; i++) {
+      try {
+        info = await connection.getAccountInfo(initialTokenAccount.publicKey);
+        break;
+      } catch (e) {
+        console.log("getAccountInfo error: " + e);
+        await sleep(500);
+      }
+    }
     if (!info) {
       const balanceNeeded = await Token.getMinBalanceRentForExemptAccount(
         connection,
       );
-      const key = await token.createAccount(accountOwner, initialTokenAccount, balanceNeeded / 8);
+      for (var i = 0; i < 10; i++) {
+        try {
+          const key = await token.createAccount(accountOwner, initialTokenAccount, balanceNeeded / 8);
+          break;
+        } catch (e) {
+          console.log("token createAccount error: " + e);
+          await sleep(500);
+        }
+      }
     }
     info = await connection.getAccountInfo(mintAccount.publicKey);
     if (info) {

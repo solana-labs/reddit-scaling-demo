@@ -79,7 +79,14 @@ async function loadProgram(connection: Connection, payer, path: string): Promise
 
   const program_account = new Account();
   console.log('Loading program:', path);
-  await BpfLoader.load(connection, payer, program_account, data);
+  for (var i = 0; i < 10; i++) {
+    try {
+      await BpfLoader.load(connection, payer, program_account, data);
+      break;
+    } catch (e) {
+    }
+  }
+  console.log("done");
   return program_account.publicKey;
 }
 

@@ -27,8 +27,7 @@ import {
   getConnection,
 } from './token-test';
 import {Store} from '../client/util/store';
-import {Account} from '@solana/web3.js';
-import {SystemProgram, TransferParams} from '@solana/web3.js';
+import {Account, SystemProgram, TransferParams} from '@solana/web3.js';
 import {newAccountWithLamports} from '../client/util/new-account-with-lamports';
 import {sendAndConfirmTransaction} from '../client/util/send-and-confirm-transaction';
 import mkdirp from 'mkdirp-promise';
@@ -49,6 +48,13 @@ async function main() {
   const connection = await getConnection();
   console.log("done.");
 
+  if (argv.create_payer) {
+    var payer_account = new Account();
+    fs.writeFileSync(argv.payer_account, payer_account.secretKey);
+    console.log("Wrote " + payer_account.publicKey + " to " + argv.payer_account);
+    return;
+  }
+
   var payer: Account;
   var payer_balance;
   try {
@@ -62,12 +68,31 @@ async function main() {
   } catch (err) {
     console.log("Payer account doesn't exist. " + err);
     var payer_account = await newAccountWithLamports(connection, 100000000000);
+    const backup_id = Math.ceil(Math.random() * 10000);
+    try {
+      fs.copyFile(argv.payer_account, "payer_backup" + backup_id + ".json");
+    } catch (e) {
+      console.log("error backing up file:" + e);
+    }
     fs.writeFileSync(argv.payer_account, payer_account.secretKey);
     payer = payer_account;
     const info = await connection.getAccountInfo(payer.publicKey);
     console.log("  using payer with " + info.lamports + " lamports.");
     payer_balance = info.lamports;
   }
+
+  var start = Date.now();
+  console.log('Starting reddit test: loading token program..');
+  await loadTokenProgram(connection, payer, argv.v);
+  const load_token_time = (Date.now() - start);
+  console.log("loaded in " + load_token_time + " ms");
+
+  console.log('Creating reddit token mint account..');
+  start = Date.now();
+  var mintAmount = argv.num_accounts * argv.num_transfer * 10;
+  var mintOwner = await createMint(connection, payer, argv.id, mintAmount, argv.v);
+  const mint_create_time = (Date.now() - start);
+  console.log("  mint created in " + mint_create_time + " ms");
 
   const blockhash = await connection.getRecentBlockhashAndContext();
   //console.dir(blockhash);
@@ -84,28 +109,24 @@ async function main() {
   var payers = [];
   for (var i = 0; i < argv.num_payers; i++) {
     var new_payer = new Account();
+    fs.writeFileSync("accounts/payer_" + i + "_" + argv.id + ".json", new_payer.secretKey);
     var params: TransferParams = {
       fromPubkey: payer.publicKey,
       toPubkey: new_payer.publicKey,
       lamports: feesPerPayer,
     };
     var tx = SystemProgram.transfer(params);
-    await sendAndConfirmTransaction('fund payers', connection, tx, payer);
-    payers.push(new_payer);
+    var success = false;
+    for (var j = 0; j < 10; j++) {
+      try {
+        await sendAndConfirmTransaction('fund payers', connection, tx, payer);
+        payers.push(new_payer);
+        break;
+      } catch(e) {
+        console.log("fund payers failed: " + e);
+      }
+    }
   }
-
-  var start = Date.now();
-  console.log('Starting reddit test: loading token program..');
-  await loadTokenProgram(connection, payer, argv.v);
-  const load_token_time = (Date.now() - start);
-  console.log("loaded in " + load_token_time + " ms");
-
-  console.log('Creating reddit token mint account..');
-  start = Date.now();
-  var mintAmount = argv.num_accounts * argv.num_transfer * 10;
-  var mintOwner = await createMint(connection, payer, argv.id, mintAmount, argv.v);
-  const mint_create_time = (Date.now() - start);
-  console.log("  mint created in " + mint_create_time + " ms");
 
   console.log('Creating subreddit accounts.. ' + argv.num_accounts);
   start = Date.now();
@@ -142,7 +163,11 @@ async function main() {
     };
 
     var tx = SystemProgram.transfer(params);
-    await sendAndConfirmTransaction('defund payers', connection, tx, payers[i]);
+    try {
+      await sendAndConfirmTransaction('defund payers', connection, tx, payers[i]).catch(e => {});
+    } catch (e) {
+      console.log("defund payers failed with: " + e);
+    }
   }
 
   const info = await connection.getAccountInfo(payer.publicKey);
